@@ -7,10 +7,15 @@
 #pragma once
 #include <jsoncpp/json/json.h>
 
+#include <atomic>
+#include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <ctime>
+#include <iomanip>
 #include <iostream>
 #include <memory>
+#include <random>
 #include <sstream>
 #include <string>
 
@@ -50,7 +55,8 @@ namespace wylrpc {
 
 class JsonUtil {
     // 序列化
-    bool serialize(const Json::Value &val, std::string &body) {
+public:
+    static bool serialize(const Json::Value &val, std::string &body) {
         // 先得有工厂类
         Json::StreamWriterBuilder swb;
         swb.settings_["emitUTF8"] = true;  // 加上这句防止输出乱码
@@ -67,7 +73,7 @@ class JsonUtil {
     }
 
     // 反序列化
-    bool unserialize(const std::string &body, Json::Value &val) {
+    static bool unserialize(const std::string &body, Json::Value &val) {
         // 先定义工厂类
         Json::CharReaderBuilder crb;
         crb.settings_["emitUTF8"] = true;  // 禁止值转义为Unicode
@@ -77,10 +83,40 @@ class JsonUtil {
         bool ret =
             cr->parse(body.c_str(), body.c_str() + body.size(), &val, &errs);
         if (ret == false) {
-            std::cout << "json unserialize failed : " << errs << std::endl;
+            ELOG("json unserialize failed : %s", errs.c_str());
             return false;
         }
         return true;
+    }
+};
+class UUID {
+public:
+    static std::string uuid() {
+        std::stringstream ss;
+        // 1.机器随机数
+        std::random_device rd;
+        // 2.伪随机数
+        std::mt19937 generator(rd());
+        // 3.限定随机数范围
+        std::uniform_int_distribution<int> distribution(0, 255);
+        // 4.生成8各随机数，按照特定格式组织成为16进制数字字符的字符串
+        for (int i = 0; i < 8; i++) {
+            if (i == 4 || i == 6) {
+                ss << "-";
+            }
+            ss << std::setw(2) << std::setfill('0') << std::hex
+               << distribution(generator);
+        }
+        ss << "-";
+        //  5.定义一个8字节序号，按照特定格式组织成为16进制数字字符的字符串
+        static std::atomic<size_t> seq(1);
+        size_t cur = seq.fetch_add(1);
+        for (int i = 7; i >= 0; i--) {
+            if (i == 5) ss << "-";
+            ss << std::setw(2) << std::setfill('0') << std::hex
+               << ((cur >> (i * 8)) & 0xFF);
+        }
+        return ss.str();
     }
 };
 }  // namespace wylrpc
