@@ -1,3 +1,10 @@
+// 抽象层的实现：
+// BaseMessage
+// BaseBuffer
+// BaseProtocol
+// BaseConnection
+// BaseServer
+// BaseClient
 #pragma once
 
 #include <functional>

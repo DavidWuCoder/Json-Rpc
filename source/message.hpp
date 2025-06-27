@@ -1,0 +1,170 @@
+// 消息的具体实现，对应BaseMessage
+//
+// 实现方式：
+// BaseMeaage派生出JsonMessage(多了body成员)
+// 由JsonMessage派生出JsonRequest和JsonResponse
+// 由JsonRequet派生出三种request(RPC Topic Service)
+// 由JsonResponse派生出三种response
+#pragma once
+#include <jsoncpp/json/value.h>
+#include <pthread.h>
+
+#include <cinttypes>
+
+#include "abstract.hpp"
+#include "detail.hpp"
+#include "fields.hpp"
+
+namespace wylrpc {
+typedef std::pair<std::string, std::string> Address;
+class JsonMessage : public BaseMessage {
+public:
+    using ptr = std::shared_ptr<JsonMessage>;
+    virtual std::string serialize() override {
+        std::string body;
+        bool ret = JSON::serialize(_body, body);
+        if (ret == false) {
+            return std::string();
+        }
+        return body;
+    }
+    virtual bool unserialize(const std::string &msg) override {
+        return JSON::unserialize(msg, _body);
+    }
+
+protected:
+    Json::Value _body;
+};
+
+// 这里将实现全留给子类
+class JsonRequest : public JsonMessage {
+public:
+    using ptr = std::shared_ptr<JsonRequest>;
+};
+
+class JsonResponse : public JsonMessage {
+public:
+    using ptr = std::shared_ptr<JsonResponse>;
+    // 由于大部分响应都只有状态码，因此这里直接实现check等方法了
+    virtual bool check() override {
+        if (_body[KEY_RCODE].isNull() == true) {
+            ELOG("响应中没有响应状态码");
+            return false;
+        }
+        if (_body[KEY_RCODE].isInt() == false) {
+            ELOG("响应状态码类型不是整数");
+            return false;
+        }
+        return true;
+    }
+    virtual RCode rcode() { return (RCode)_body[KEY_RCODE].asInt(); }
+    virtual void setRCode(RCode rcode) { _body[KEY_RCODE] = (int)rcode; }
+};
+
+class RpcRequest : public JsonRequest {
+public:
+    using ptr = std::shared_ptr<RpcRequest>;
+    virtual bool check() override {
+        if (_body[KEY_METHOD].isNull() == true ||
+            _body[KEY_METHOD].isString() == false) {
+            ELOG("Rpc请求中没有请求方法或者请求方法类型不是字符串");
+            return false;
+        }
+        if (_body[KEY_PARAMS].isNull() == true ||
+            _body[KEY_PARAMS].isObject() == false) {
+            ELOG("Rpc请求中没有参数或者参数类型的类型不是一个Json::Value");
+            return false;
+        }
+        return true;
+    }
+    std::string method() { return _body[KEY_METHOD].asString(); }
+    void setMethod(const std::string &method_name) {
+        _body[KEY_METHOD] = method_name;
+    }
+    Json::Value params() { return _body[KEY_PARAMS]; }
+    void setParams(const Json::Value params) { _body[KEY_PARAMS] = params; }
+};
+
+class TopicRequest : public JsonRequest {
+public:
+    using ptr = std::shared_ptr<TopicRequest>;
+    virtual bool check() override {
+        if (_body[KEY_TOPIC_KEY].isNull() == true ||
+            _body[KEY_TOPIC_KEY].isString() == false) {
+            ELOG("主题请求中没有主题名称或者主题名称的类型不是字符串");
+            return false;
+        }
+        if (_body[KEY_OPTYPE].isNull() == true ||
+            _body[KEY_OPTYPE].isIntegral() == false) {
+            ELOG("主题请求中没有操作类型或者操作类型不是整数");
+            return false;
+        }
+        if (_body[KEY_OPTYPE].asInt() == (int)TopicOptype::TOPIC_PUBLISH &&
+            (_body[KEY_TOPIC_MSG].isNull() == true ||
+             _body[KEY_TOPIC_MSG].isString() == false)) {
+            ELOG("主题发布请求中没有消息或者消息的类型不是字符串");
+            return false;
+        }
+        return true;
+    }
+    std::string topic() { return _body[KEY_TOPIC_KEY].asString(); }
+    void setTopic(const std::string &topic_name) {
+        _body[KEY_TOPIC_KEY] = topic_name;
+    }
+    TopicOptype optype() { return (TopicOptype)_body[KEY_OPTYPE].asInt(); }
+    void setOptype(const TopicOptype optype) {
+        _body[KEY_OPTYPE] = (int)optype;
+    }
+    std::string topicMsg() { return _body[KEY_TOPIC_MSG].asString(); }
+    void setTopicMsg(const std::string &msg) { _body[KEY_TOPIC_MSG] = msg; }
+};
+
+class ServiceRequest : public JsonRequest {
+public:
+    using ptr = std::shared_ptr<ServiceRequest>;
+    virtual bool check() override {
+        if (_body[KEY_METHOD].isNull() == true ||
+            _body[KEY_METHOD].isString() == false) {
+            ELOG("服务请求中没有方法名称或者方法名称的类型不是字符串");
+            return false;
+        }
+        if (_body[KEY_OPTYPE].isNull() == true ||
+            _body[KEY_OPTYPE].isIntegral() == false) {
+            ELOG("服务请求请求中没有操作类型或者操作类型不是整数");
+            return false;
+        }
+        if (_body[KEY_OPTYPE].asInt() !=
+                (int)ServiceOptype::SERVICE_DISCOVERY &&
+            (_body[KEY_HOST].isNull() == true ||
+             _body[KEY_HOST].isObject() == false ||
+             _body[KEY_HOST][KEY_HOST_IP].isNull() == true ||
+             _body[KEY_HOST][KEY_HOST_IP].isString() == false ||
+             _body[KEY_HOST][KEY_HOST_PORT].isNull() == true ||
+             _body[KEY_HOST][KEY_HOST_PORT].isIntegral() == false)) {
+            ELOG("服务请求中主机信息错误");
+            return false;
+        }
+        return true;
+    }
+    std::string method() { return _body[KEY_METHOD].asString(); }
+    void setMethod(const std::string &method_name) {
+        _body[KEY_METHOD] = method_name;
+    }
+    ServiceOptype optype() { return (ServiceOptype)_body[KEY_OPTYPE].asInt(); }
+    void setOptype(const ServiceOptype optype) {
+        _body[KEY_OPTYPE] = (int)optype;
+    }
+    Address host() {
+        Address addr;
+        addr.first = _body[KEY_HOST][KEY_HOST_IP].asString();
+        addr.second = _body[KEY_HOST][KEY_HOST_PORT].asInt();
+        return addr;
+    }
+    void setHost(const Address &host) {
+        Json::Value val;
+        val[KEY_HOST_IP] = host.first;
+        val[KEY_HOST_PORT] = host.second;
+        _body[KEY_TOPIC_MSG] = val;
+    }
+};
+}  // namespace wylrpc

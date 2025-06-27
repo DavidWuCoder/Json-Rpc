@@ -77,4 +77,22 @@ static std::string errReason(RCode code) {
     }
     return err_res;
 }
+
+enum class RType { REQ_ASYNC = 0, REQ_CALLBACK };
+
+enum class TopicOptype {
+    TOPIC_CREATE = 0,
+    TOPIC_REMOVE,
+    TOPIC_SUBSCRIBE,
+    TOPIC_CANCEL,
+    TOPIC_PUBLISH
+};
+
+enum class ServiceOptype {
+    SERVICE_REGISTRY = 0,
+    SERVICE_DISCOVERY,
+    SERVICE_ONLINE,
+    SERVICE_OFFLINE,
+    SERVICE_UNKNOW
+};
 }  // namespace wylrpc

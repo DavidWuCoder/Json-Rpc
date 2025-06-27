@@ -51,7 +51,7 @@ namespace wylrpc {
 #define ILOG(format, ...) LOG(LINFO, COLOR_GREEN, format, ##__VA_ARGS__)
 #define ELOG(format, ...) LOG(LERROR, COLOR_RED, format, ##__VA_ARGS__)
 
-class JsonUtil {
+class JSON {
     // 序列化
 public:
     static bool serialize(const Json::Value &val, std::string &body) {
