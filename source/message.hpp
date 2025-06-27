@@ -67,12 +67,12 @@ public:
     virtual bool check() override {
         if (_body[KEY_METHOD].isNull() == true ||
             _body[KEY_METHOD].isString() == false) {
-            ELOG("Rpc请求中没有请求方法或者请求方法类型不是字符串");
+            ELOG("Rpc请求中没有请求方法，或者请求方法类型不是字符串");
             return false;
         }
         if (_body[KEY_PARAMS].isNull() == true ||
             _body[KEY_PARAMS].isObject() == false) {
-            ELOG("Rpc请求中没有参数或者参数类型的类型不是一个Json::Value");
+            ELOG("Rpc请求中没有参数，或者参数类型的类型不是一个Json::Value");
             return false;
         }
         return true;
@@ -91,12 +91,12 @@ public:
     virtual bool check() override {
         if (_body[KEY_TOPIC_KEY].isNull() == true ||
             _body[KEY_TOPIC_KEY].isString() == false) {
-            ELOG("主题请求中没有主题名称或者主题名称的类型不是字符串");
+            ELOG("主题请求中没有主题名称，或者主题名称的类型不是字符串");
             return false;
         }
         if (_body[KEY_OPTYPE].isNull() == true ||
             _body[KEY_OPTYPE].isIntegral() == false) {
-            ELOG("主题请求中没有操作类型或者操作类型不是整数");
+            ELOG("主题请求中没有操作类型，或者操作类型不是整数");
             return false;
         }
         if (_body[KEY_OPTYPE].asInt() == (int)TopicOptype::TOPIC_PUBLISH &&
@@ -165,6 +165,105 @@ public:
         val[KEY_HOST_IP] = host.first;
         val[KEY_HOST_PORT] = host.second;
         _body[KEY_TOPIC_MSG] = val;
+    }
+};
+
+class RpcResponse : public JsonResponse {
+public:
+    using ptr = std::shared_ptr<RpcResponse>;
+    virtual bool check() override {
+        if (_body[KEY_RCODE].isNull() == true ||
+            _body[KEY_RCODE].isIntegral() == false) {
+            ELOG("RPC响应中没有响应状态码，或者状态码不是整数!");
+            return false;
+        }
+        if (_body[KEY_RESULT].isNull() == true ||
+            _body[KEY_RESULT].isObject() == false) {
+            ELOG("响应中没有RPC调用结果，或者结果类型不是Json::Value！");
+            return false;
+        }
+        return true;
+    }
+    Json::Value result() { return _body[KEY_RESULT]; }
+    void setResult(const Json::Value &result) { _body[KEY_RESULT] = result; }
+};
+class TopicResponse : public JsonResponse {
+public:
+    using ptr = std::shared_ptr<TopicResponse>;
+};
+class ServiceResponse : public JsonResponse {
+public:
+    using ptr = std::shared_ptr<ServiceResponse>;
+    virtual bool check() override {
+        if (_body[KEY_RCODE].isNull() == true ||
+            _body[KEY_RCODE].isString() == false) {
+            ELOG("Service响应中没有响应状态码，或者状态码类型不是字符串");
+            return false;
+        }
+        if (_body[KEY_OPTYPE].isNull() == true ||
+            _body[KEY_OPTYPE].isIntegral() == false) {
+            ELOG("响应中没有操作类型，或者操作类型不是字符串！");
+            return false;
+        }
+        if (_body[KEY_OPTYPE].asInt() ==
+                (int)ServiceOptype::SERVICE_DISCOVERY &&
+            (_body[KEY_METHOD].isNull() == true ||
+             _body[KEY_METHOD].isString() == false ||
+             _body[KEY_HOST].isNull() == true ||
+             _body[KEY_HOST].isArray() == false)) {
+            ELOG("服务发现响应中METHOD或HOST相关字段错误");
+            return false;
+        }
+        return true;
+    }
+    ServiceOptype optype() { return (ServiceOptype)_body[KEY_OPTYPE].asInt(); }
+    void setOptype(ServiceOptype type) { _body[KEY_OPTYPE] = (int)type; }
+    std::string method() { return _body[KEY_METHOD].asString(); }
+    void setMethod(const std::string &method) { _body[KEY_METHOD] = method; }
+    std::vector<Address> hosts() {
+        std::vector<Address> addrs;
+        int sz = _body[KEY_HOST].size();
+        for (int i = 0; i < sz; i++) {
+            Address addr;
+            addr.first = _body[KEY_HOST][i][KEY_HOST_IP].asString();
+            addr.second = _body[KEY_HOST][i][KEY_HOST_PORT].asInt();
+            addrs.push_back(addr);
+        }
+        return addrs;
+    }
+    void setHosts(std::vector<Address> addrs) {
+        for (auto &addr : addrs) {
+            Json::Value val;
+            val[KEY_HOST_IP] = addr.first;
+            val[KEY_HOST_PORT] = addr.second;
+            _body[KEY_HOST].append(val);
+        }
+    }
+};
+
+// 实现一个生产消息对象的工厂
+class MessageFactory {
+public:
+    static BaseMessage::ptr create(MType mtype) {
+        switch (mtype) {
+            case MType::REQ_RPC:
+                return std::make_shared<RpcRequest>();
+            case MType::RSP_RPC:
+                return std::make_shared<RpcResponse>();
+            case MType::REQ_TOPIC:
+                return std::make_shared<TopicRequest>();
+            case MType::RSP_TOPIC:
+                return std::make_shared<TopicResponse>();
+            case MType::REQ_SERVICE:
+                return std::make_shared<ServiceRequest>();
+            case MType::RSP_SERVICE:
+                return std::make_shared<ServiceResponse>();
+        }
+        return BaseMessage::ptr();
+    }
+    template <typename T, typename... Args>
+    static std::shared_ptr<T> create(Args &&...args) {
+        return std::make_shared<T>(std::forward(args)...);
     }
 };
 }  // namespace wylrpc
