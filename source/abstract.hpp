@@ -36,7 +36,7 @@ private:
 class BaseBuffer {
 public:
     using ptr = std::shared_ptr<BaseBuffer>;
-    virtual size_t readablesize() = 0;
+    virtual size_t readableSize() = 0;
     virtual int32_t peekInt32() = 0;
     virtual int32_t readInt32() = 0;
     virtual void retrieveInt32() = 0;
@@ -49,7 +49,7 @@ public:
     virtual std::string serialize(const BaseMessage::ptr &msg) = 0;
     virtual bool canProcessed(const BaseBuffer::ptr &buf) = 0;
     virtual bool onMessage(const BaseBuffer::ptr &buf,
-                           const BaseMessage::ptr &msg) = 0;
+                           BaseMessage::ptr &msg) = 0;
 };
 
 class BaseConnection {
