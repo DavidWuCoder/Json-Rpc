@@ -16,7 +16,7 @@
 #include "fields.hpp"
 
 namespace wylrpc {
-typedef std::pair<std::string, std::string> Address;
+typedef std::pair<std::string, int> Address;
 class JsonMessage : public BaseMessage {
 public:
     using ptr = std::shared_ptr<JsonMessage>;
@@ -108,7 +108,7 @@ public:
         return true;
     }
     std::string topic() { return _body[KEY_TOPIC_KEY].asString(); }
-    void setTopic(const std::string &topic_name) {
+    void setTopicKey(const std::string &topic_name) {
         _body[KEY_TOPIC_KEY] = topic_name;
     }
     TopicOptype optype() { return (TopicOptype)_body[KEY_OPTYPE].asInt(); }
@@ -164,7 +164,7 @@ public:
         Json::Value val;
         val[KEY_HOST_IP] = host.first;
         val[KEY_HOST_PORT] = host.second;
-        _body[KEY_TOPIC_MSG] = val;
+        _body[KEY_HOST] = val;
     }
 };
 
@@ -177,8 +177,7 @@ public:
             ELOG("RPC响应中没有响应状态码，或者状态码不是整数!");
             return false;
         }
-        if (_body[KEY_RESULT].isNull() == true ||
-            _body[KEY_RESULT].isObject() == false) {
+        if (_body[KEY_RESULT].isNull() == true) {
             ELOG("响应中没有RPC调用结果，或者结果类型不是Json::Value！");
             return false;
         }
@@ -196,8 +195,8 @@ public:
     using ptr = std::shared_ptr<ServiceResponse>;
     virtual bool check() override {
         if (_body[KEY_RCODE].isNull() == true ||
-            _body[KEY_RCODE].isString() == false) {
-            ELOG("Service响应中没有响应状态码，或者状态码类型不是字符串");
+            _body[KEY_RCODE].isInt() == false) {
+            ELOG("Service响应中没有响应状态码，或者状态码类型不是整数");
             return false;
         }
         if (_body[KEY_OPTYPE].isNull() == true ||
