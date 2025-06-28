@@ -12,6 +12,7 @@
 #include "detail.hpp"
 #include "fields.hpp"
 #include "message.hpp"
+#include "muduo/net/Callbacks.h"
 
 namespace wylrpc {
 class MuduoBuffer : public BaseBuffer {
@@ -104,6 +105,31 @@ public:
     template <typename... Args>
     static BaseProtocol::ptr create(Args &&...args) {
         return std::make_shared<LVProtocol>(std::forward(args)...);
+    }
+};
+
+class MuduoConnection : public BaseConnection {
+public:
+    using ptr = std::shared_ptr<BaseConnection>;
+    MuduoConnection(muduo::net::TcpConnectionPtr &conn,
+                    BaseProtocol::ptr &protocol)
+        : _conn(conn), _protocol(protocol) {}
+    virtual void send(const BaseMessage::ptr &msg) override {
+        std::string body = _protocol->serialize(msg);
+        _conn->send(body);
+    }
+    virtual void shutdown() override { _conn->shutdown(); }
+    virtual bool connected() override { return _conn->connected(); }
+
+private:
+    muduo::net::TcpConnectionPtr _conn;
+    BaseProtocol::ptr _protocol;
+};
+class ConnectionFactory {
+public:
+    template <typename... Args>
+    static BaseProtocol::ptr create(Args &&...args) {
+        return std::make_shared<MuduoConnection>(std::forward(args)...);
     }
 };
 }  // namespace wylrpc
