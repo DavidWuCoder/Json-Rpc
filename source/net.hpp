@@ -8,6 +8,10 @@
 #include <muduo/net/TcpConnection.h>
 #include <muduo/net/TcpServer.h>
 
+#include <map>
+#include <mutex>
+#include <unordered_map>
+
 #include "abstract.hpp"
 #include "detail.hpp"
 #include "fields.hpp"
@@ -131,5 +135,169 @@ public:
     static BaseProtocol::ptr create(Args &&...args) {
         return std::make_shared<MuduoConnection>(std::forward(args)...);
     }
+};
+
+class MuduoServer : public BaseServer {
+public:
+    using ptr = std::shared_ptr<MuduoServer>;
+    MuduoServer(int port)
+        : _server(&_baseloop, muduo::net::InetAddress("0.0.0.0", port),
+                  "DictServer", muduo::net::TcpServer::kReusePort),
+          _protocol(ProtocolFactory::create()) {
+        // 设置两种回调函数
+        _server.setConnectionCallback(
+            std::bind(&MuduoServer::onConnection, this, std::placeholders::_1));
+        _server.setMessageCallback(
+            std::bind(&MuduoServer::onMessage, this, std::placeholders::_1,
+                      std::placeholders::_2, std::placeholders::_3));
+    }
+    virtual void start() = 0;
+
+private:
+    // 连接和关闭时的回调函数
+    void onConnection(const muduo::net::TcpConnectionPtr &conn) {
+        if (conn->connected()) {
+            std::cout << "连接建立！" << std::endl;
+            BaseConnection::ptr muduo_conn =
+                ConnectionFactory::create(conn, _protocol);
+            {
+                std::unique_lock<std::mutex> lock(_mutex);
+                _conns.insert(std::make_pair(conn, muduo_conn));
+            }
+            if (_cb_connection) _cb_connection(muduo_conn);
+        } else {
+            std::cout << "连接失败！" << std::endl;
+            BaseConnection::ptr muduo_conn;
+            {
+                std::unique_lock<std::mutex> lock(_mutex);
+                auto it = _conns.find(conn);
+                if (it == _conns.end()) {
+                    return;
+                }
+                muduo_conn = it->second;
+                _conns.erase(conn);
+            }
+            if (_cb_close) _cb_close(muduo_conn);
+        }
+    }
+    // 收到消息时的回调函数
+    void onMessage(const muduo::net::TcpConnectionPtr &conn,
+                   muduo::net::Buffer *buf, muduo::Timestamp) {
+        DLOG("连接有数据到来开始处理");
+        auto base_buf = BufferFactory::create(buf);
+        while (1) {
+            if (_protocol->canProcessed(base_buf) == false) {
+                if (base_buf->readableSize() > maxDataSize) {
+                    conn->shutdown();
+                    ELOG("缓冲区中数据过大！");
+                    return;
+                }
+            }
+            break;
+        }
+        BaseMessage::ptr msg;
+        bool ret = _protocol->onMessage(base_buf, msg);
+        if (ret == false) {
+            conn->shutdown();
+            ELOG("缓冲区中数据错误");
+            return;
+        }
+        BaseConnection::ptr base_conn;
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            auto it = _conns.find(conn);
+            if (it == _conns.end()) {
+                conn->shutdown();
+                return;
+            }
+            base_conn = it->second;
+        }
+        if (_cb_message) _cb_message(base_conn, msg);
+    }
+
+private:
+    const size_t maxDataSize = (1 << 16);
+    BaseProtocol::ptr _protocol;
+    muduo::net::EventLoop _baseloop;
+    muduo::net::TcpServer _server;
+    std::mutex _mutex;
+    std::map<muduo::net::TcpConnectionPtr, BaseConnection::ptr> _conns;
+};
+class MuduoClient : public BaseClient {
+public:
+    using ptr = std::shared_ptr<MuduoClient>;
+    MuduoClient(const std::string &sip, int sport)
+        : _protocol(ProtocolFactory::create()),
+          _baseloop(
+              _loopthread.startLoop())  // 客户端只能交给一个线程区进行事件循环
+          ,
+          _downlatch(1),
+          _client(_baseloop, muduo::net::InetAddress(sip, sport),
+                  "MuduoClient") {}
+
+    virtual void connect() override {
+        DLOG("设置回调函数，连接服务器");
+        _client.setConnectionCallback(
+            std::bind(&MuduoClient::onConnection, this, std::placeholders::_1));
+        _client.setMessageCallback(
+            std::bind(&MuduoClient::onMessage, this, std::placeholders::_1,
+                      std::placeholders::_2, std::placeholders::_3));
+    }
+    virtual bool send(const BaseMessage::ptr &message) override {
+        if (connected() == false) {
+            ELOG("连接已断开");
+            return false;
+        }
+        _conn->send(message);
+    }
+    virtual void shutdown() override { return _client.disconnect(); }
+    virtual bool connected() override { return _conn && _conn->connected(); }
+    virtual BaseConnection::ptr connection() override { return _conn; }
+
+private:
+    // 连接和关闭时的回调函数
+    void onConnection(const muduo::net::TcpConnectionPtr &conn) {
+        if (conn->connected()) {
+            std::cout << "连接建立！" << std::endl;
+            _downlatch.countDown();  // downlatch计数--
+            _conn = ConnectionFactory::create(conn, _protocol);
+        } else {
+            std::cout << "连接失败！" << std::endl;
+            _conn.reset();
+        }
+    }
+    // 收到消息时的回调函数
+    void onMessage(const muduo::net::TcpConnectionPtr &conn,
+                   muduo::net::Buffer *buf, muduo::Timestamp) {
+        DLOG("连接有数据到来开始处理");
+        auto base_buf = BufferFactory::create(buf);
+        while (1) {
+            if (_protocol->canProcessed(base_buf) == false) {
+                if (base_buf->readableSize() > maxDataSize) {
+                    conn->shutdown();
+                    ELOG("缓冲区中数据过大！");
+                    return;
+                }
+            }
+            break;
+        }
+        BaseMessage::ptr msg;
+        bool ret = _protocol->onMessage(base_buf, msg);
+        if (ret == false) {
+            conn->shutdown();
+            ELOG("缓冲区中数据错误");
+            return;
+        }
+        if (_cb_message) _cb_message(_conn, msg);
+    }
+
+private:
+    const size_t maxDataSize = (1 << 16);
+    BaseProtocol::ptr _protocol;
+    BaseConnection::ptr _conn;
+    muduo::CountDownLatch _downlatch;
+    muduo::net::EventLoopThread _loopthread;
+    muduo::net::EventLoop *_baseloop;
+    muduo::net::TcpClient _client;
 };
 }  // namespace wylrpc

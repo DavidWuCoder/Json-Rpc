@@ -101,5 +101,4 @@ protected:
     CloseCallback _cb_close;
     MessageCallback _cb_message;
 };
-
 }  // namespace wylrpc
