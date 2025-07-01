@@ -8,6 +8,7 @@
 #include <muduo/net/TcpConnection.h>
 #include <muduo/net/TcpServer.h>
 
+#include <algorithm>
 #include <map>
 #include <mutex>
 #include <unordered_map>
@@ -67,6 +68,7 @@ public:
         int32_t body_len =
             total_len - idlen - mtypeFieldsLength - idlenFieldsLength;
         std::string body = buf->retrieveAsString(body_len);
+        // DLOG("消息内容: %s", body.c_str())
         msg = MessageFactory::create(mtype);
         if (msg.get() == nullptr) {
             ELOG("消息类型错误，构造消息对象失败！");
@@ -194,6 +196,9 @@ private:
                    muduo::net::Buffer *buf, muduo::Timestamp) {
         DLOG("连接有数据到来开始处理");
         auto base_buf = BufferFactory::create(buf);
+        // std::string body =
+        // base_buf->retrieveAsString(base_buf->readableSize()); DLOG("%s",
+        // body.c_str());
         while (1) {
             if (_protocol->canProcessed(base_buf) == false) {
                 if (base_buf->readableSize() > maxDataSize) {
@@ -201,27 +206,27 @@ private:
                     ELOG("缓冲区中数据过大！");
                     return;
                 }
+                break;
             }
-            break;
-        }
-        BaseMessage::ptr msg;
-        bool ret = _protocol->onMessage(base_buf, msg);
-        if (ret == false) {
-            conn->shutdown();
-            ELOG("缓冲区中数据错误");
-            return;
-        }
-        BaseConnection::ptr base_conn;
-        {
-            std::unique_lock<std::mutex> lock(_mutex);
-            auto it = _conns.find(conn);
-            if (it == _conns.end()) {
+            BaseMessage::ptr msg;
+            bool ret = _protocol->onMessage(base_buf, msg);
+            if (ret == false) {
                 conn->shutdown();
+                ELOG("缓冲区中数据错误");
                 return;
             }
-            base_conn = it->second;
+            BaseConnection::ptr base_conn;
+            {
+                std::unique_lock<std::mutex> lock(_mutex);
+                auto it = _conns.find(conn);
+                if (it == _conns.end()) {
+                    conn->shutdown();
+                    return;
+                }
+                base_conn = it->second;
+            }
+            if (_cb_message) _cb_message(base_conn, msg);
         }
-        if (_cb_message) _cb_message(base_conn, msg);
     }
 
 private:
@@ -261,9 +266,10 @@ public:
                       std::placeholders::_2, std::placeholders::_3));
         _client.connect();
         _downlatch.wait();
-        DLOG("连接服务器成功");
+        DLOG("连接服务器成功, %d", connected());
     }
     virtual bool send(const BaseMessage::ptr &message) override {
+        DLOG("准备开始发送消息")
         if (connected() == false) {
             ELOG("连接已断开, 发送失败");
             return false;
@@ -282,12 +288,13 @@ private:
         // DLOG("连接到来");
         if (conn->connected()) {
             std::cout << "连接建立！" << std::endl;
-            _downlatch.countDown();  // downlatch计数--
             _conn = ConnectionFactory::create(conn, _protocol);
+            _downlatch.countDown();  // downlatch计数--
             // DLOG("是否连接: %d", connected());
         } else {
             std::cout << "连接失败！" << std::endl;
             _conn.reset();
+            _downlatch.countDown();
         }
     }
     // 收到消息时的回调函数
@@ -295,6 +302,9 @@ private:
                    muduo::net::Buffer *buf, muduo::Timestamp) {
         DLOG("连接有数据到来开始处理");
         auto base_buf = BufferFactory::create(buf);
+        // std::string body =
+        // base_buf->retrieveAsString(base_buf->readableSize()); DLOG("%s",
+        // body.c_str());
         while (1) {
             if (_protocol->canProcessed(base_buf) == false) {
                 if (base_buf->readableSize() > maxDataSize) {
@@ -302,17 +312,17 @@ private:
                     ELOG("缓冲区中数据过大！");
                     return;
                 }
+                break;
             }
-            break;
+            BaseMessage::ptr msg;
+            bool ret = _protocol->onMessage(base_buf, msg);
+            if (ret == false) {
+                conn->shutdown();
+                ELOG("缓冲区中数据错误");
+                return;
+            }
+            if (_cb_message) _cb_message(_conn, msg);
         }
-        BaseMessage::ptr msg;
-        bool ret = _protocol->onMessage(base_buf, msg);
-        if (ret == false) {
-            conn->shutdown();
-            ELOG("缓冲区中数据错误");
-            return;
-        }
-        if (_cb_message) _cb_message(_conn, msg);
     }
 
 private:

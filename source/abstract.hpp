@@ -63,7 +63,7 @@ public:
 using ConnectionCallback = std::function<void(BaseConnection::ptr &)>;
 using CloseCallback = std::function<void(BaseConnection::ptr &)>;
 using MessageCallback =
-    std::function<void(BaseConnection::ptr &, BaseMessage::ptr &buf)>;
+    std::function<void(const BaseConnection::ptr &, BaseMessage::ptr &buf)>;
 class BaseServer {
 public:
     using ptr = std::shared_ptr<BaseServer>;
