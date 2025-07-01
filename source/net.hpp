@@ -22,6 +22,7 @@ namespace wylrpc {
 class MuduoBuffer : public BaseBuffer {
 public:
     using ptr = std::shared_ptr<MuduoBuffer>;
+    MuduoBuffer(muduo::net::Buffer *buf) : _buf(buf) {}
     virtual size_t readableSize() override { return _buf->readableBytes(); }
     virtual int32_t peekInt32() override { return _buf->peekInt32(); }
     virtual int32_t readInt32() override { return _buf->readInt32(); }
@@ -38,7 +39,7 @@ class BufferFactory {
 public:
     template <typename... Args>
     static BaseBuffer::ptr create(Args &&...args) {
-        return std::make_shared<MuduoBuffer>(std::forward(args)...);
+        return std::make_shared<MuduoBuffer>(std::forward<Args>(args)...);
     }
 };
 
@@ -108,15 +109,15 @@ class ProtocolFactory {
 public:
     template <typename... Args>
     static BaseProtocol::ptr create(Args &&...args) {
-        return std::make_shared<LVProtocol>(std::forward(args)...);
+        return std::make_shared<LVProtocol>(std::forward<Args>(args)...);
     }
 };
 
 class MuduoConnection : public BaseConnection {
 public:
     using ptr = std::shared_ptr<BaseConnection>;
-    MuduoConnection(muduo::net::TcpConnectionPtr &conn,
-                    BaseProtocol::ptr &protocol)
+    MuduoConnection(const muduo::net::TcpConnectionPtr &conn,
+                    const BaseProtocol::ptr &protocol)
         : _conn(conn), _protocol(protocol) {}
     virtual void send(const BaseMessage::ptr &msg) override {
         std::string body = _protocol->serialize(msg);
@@ -132,8 +133,8 @@ private:
 class ConnectionFactory {
 public:
     template <typename... Args>
-    static BaseProtocol::ptr create(Args &&...args) {
-        return std::make_shared<MuduoConnection>(std::forward(args)...);
+    static BaseConnection::ptr create(Args &&...args) {
+        return std::make_shared<MuduoConnection>(std::forward<Args>(args)...);
     }
 };
 
@@ -151,7 +152,15 @@ public:
             std::bind(&MuduoServer::onMessage, this, std::placeholders::_1,
                       std::placeholders::_2, std::placeholders::_3));
     }
-    virtual void start() = 0;
+    virtual void start() override {
+        _server.setConnectionCallback(
+            std::bind(&MuduoServer::onConnection, this, std::placeholders::_1));
+        _server.setMessageCallback(
+            std::bind(&MuduoServer::onMessage, this, std::placeholders::_1,
+                      std::placeholders::_2, std::placeholders::_3));
+        _server.start();
+        _baseloop.loop();
+    }
 
 private:
     // 连接和关闭时的回调函数
@@ -223,6 +232,14 @@ private:
     std::mutex _mutex;
     std::map<muduo::net::TcpConnectionPtr, BaseConnection::ptr> _conns;
 };
+class ServerFactory {
+public:
+    template <typename... Args>
+    static MuduoServer::ptr create(Args &&...args) {
+        return std::make_shared<MuduoServer>(std::forward<Args>(args)...);
+    }
+};
+
 class MuduoClient : public BaseClient {
 public:
     using ptr = std::shared_ptr<MuduoClient>;
@@ -242,25 +259,32 @@ public:
         _client.setMessageCallback(
             std::bind(&MuduoClient::onMessage, this, std::placeholders::_1,
                       std::placeholders::_2, std::placeholders::_3));
+        _client.connect();
+        _downlatch.wait();
+        DLOG("连接服务器成功");
     }
     virtual bool send(const BaseMessage::ptr &message) override {
         if (connected() == false) {
-            ELOG("连接已断开");
+            ELOG("连接已断开, 发送失败");
             return false;
         }
         _conn->send(message);
+        DLOG("发送消息成功");
+        return true;
     }
     virtual void shutdown() override { return _client.disconnect(); }
-    virtual bool connected() override { return _conn && _conn->connected(); }
+    virtual bool connected() override { return (_conn && _conn->connected()); }
     virtual BaseConnection::ptr connection() override { return _conn; }
 
 private:
     // 连接和关闭时的回调函数
     void onConnection(const muduo::net::TcpConnectionPtr &conn) {
+        // DLOG("连接到来");
         if (conn->connected()) {
             std::cout << "连接建立！" << std::endl;
             _downlatch.countDown();  // downlatch计数--
             _conn = ConnectionFactory::create(conn, _protocol);
+            // DLOG("是否连接: %d", connected());
         } else {
             std::cout << "连接失败！" << std::endl;
             _conn.reset();
@@ -299,5 +323,12 @@ private:
     muduo::net::EventLoopThread _loopthread;
     muduo::net::EventLoop *_baseloop;
     muduo::net::TcpClient _client;
+};
+class ClientFactory {
+public:
+    template <typename... Args>
+    static MuduoClient::ptr create(Args &&...args) {
+        return std::make_shared<MuduoClient>(std::forward<Args>(args)...);
+    }
 };
 }  // namespace wylrpc

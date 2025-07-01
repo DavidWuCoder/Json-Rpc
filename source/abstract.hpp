@@ -88,7 +88,6 @@ public:
     }
     virtual void setCloseCallback(CloseCallback cb) { _cb_close = cb; }
     virtual void setMessageCallback(MessageCallback cb) { _cb_message = cb; }
-    virtual void start() = 0;
 
     virtual void connect() = 0;
     virtual bool send(const BaseMessage::ptr &message) = 0;
