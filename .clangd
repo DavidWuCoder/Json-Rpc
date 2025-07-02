@@ -1,0 +1,4 @@
+CompileFlags:
+  Add:
+    - -I../../build/release-install-cpp11/include/
+    - -std=c++17

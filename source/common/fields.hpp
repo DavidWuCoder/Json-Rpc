@@ -35,6 +35,7 @@ enum class RCode {
     RCODE_INVALID_OPTYPE,
     RCODE_NOT_FOUND_TOPIC,
     RCODE_INTERNAL_ERROR,
+    RCODE_INTENAL_ERROR
 };
 
 // 通过响应码查询响应类型的接口
