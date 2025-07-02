@@ -5,8 +5,8 @@
 #include "net.hpp"
 
 void onRpcRequest(const wylrpc::BaseConnection::ptr &conn,
-                  wylrpc::BaseMessage::ptr &msg) {
-    DLOG("收到RPC请求");
+                  wylrpc::RpcRequest::ptr &msg) {
+    DLOG("收到RPC请求: %s", msg->method().c_str());
     std::string body = msg->serialize();
     std::cout << body << std::endl;
     auto rpc_req = wylrpc::MessageFactory::create<wylrpc::RpcResponse>();
@@ -18,7 +18,7 @@ void onRpcRequest(const wylrpc::BaseConnection::ptr &conn,
 }
 
 void onTopicRequest(const wylrpc::BaseConnection::ptr &conn,
-                    wylrpc::BaseMessage::ptr &msg) {
+                    wylrpc::TopicRequest::ptr &msg) {
     DLOG("收到Topic请求");
     std::string body = msg->serialize();
     std::cout << body << std::endl;
@@ -31,8 +31,10 @@ void onTopicRequest(const wylrpc::BaseConnection::ptr &conn,
 
 int main() {
     auto dispatcher = std::make_shared<wylrpc::Dispatcher>();
-    dispatcher->registerHandler(wylrpc::MType::REQ_RPC, onRpcRequest);
-    dispatcher->registerHandler(wylrpc::MType::REQ_TOPIC, onTopicRequest);
+    dispatcher->registerHandler<wylrpc::RpcRequest>(wylrpc::MType::REQ_RPC,
+                                                    onRpcRequest);
+    dispatcher->registerHandler<wylrpc::TopicRequest>(wylrpc::MType::REQ_TOPIC,
+                                                      onTopicRequest);
     auto server = wylrpc::ServerFactory::create(8080);
     server->setMessageCallback(
         std::bind(&wylrpc::Dispatcher::onMessage, dispatcher.get(),

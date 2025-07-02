@@ -8,7 +8,6 @@
 #include <muduo/net/TcpConnection.h>
 #include <muduo/net/TcpServer.h>
 
-#include <algorithm>
 #include <map>
 #include <mutex>
 #include <unordered_map>
@@ -68,7 +67,6 @@ public:
         int32_t body_len =
             total_len - idlen - mtypeFieldsLength - idlenFieldsLength;
         std::string body = buf->retrieveAsString(body_len);
-        // DLOG("消息内容: %s", body.c_str())
         msg = MessageFactory::create(mtype);
         if (msg.get() == nullptr) {
             ELOG("消息类型错误，构造消息对象失败！");
@@ -145,7 +143,7 @@ public:
     using ptr = std::shared_ptr<MuduoServer>;
     MuduoServer(int port)
         : _server(&_baseloop, muduo::net::InetAddress("0.0.0.0", port),
-                  "DictServer", muduo::net::TcpServer::kReusePort),
+                  "MuduoServer", muduo::net::TcpServer::kReusePort),
           _protocol(ProtocolFactory::create()) {
         // 设置两种回调函数
         _server.setConnectionCallback(
@@ -196,9 +194,6 @@ private:
                    muduo::net::Buffer *buf, muduo::Timestamp) {
         DLOG("连接有数据到来开始处理");
         auto base_buf = BufferFactory::create(buf);
-        // std::string body =
-        // base_buf->retrieveAsString(base_buf->readableSize()); DLOG("%s",
-        // body.c_str());
         while (1) {
             if (_protocol->canProcessed(base_buf) == false) {
                 if (base_buf->readableSize() > maxDataSize) {
@@ -264,37 +259,35 @@ public:
         _client.setMessageCallback(
             std::bind(&MuduoClient::onMessage, this, std::placeholders::_1,
                       std::placeholders::_2, std::placeholders::_3));
+
+        // 连接服务器
         _client.connect();
         _downlatch.wait();
-        DLOG("连接服务器成功, %d", connected());
+        DLOG("连接服务器成功");
     }
     virtual bool send(const BaseMessage::ptr &message) override {
-        DLOG("准备开始发送消息")
         if (connected() == false) {
-            ELOG("连接已断开, 发送失败");
+            ELOG("连接已断开");
             return false;
         }
         _conn->send(message);
-        DLOG("发送消息成功");
         return true;
     }
     virtual void shutdown() override { return _client.disconnect(); }
-    virtual bool connected() override { return (_conn && _conn->connected()); }
+    virtual bool connected() override { return _conn && _conn->connected(); }
     virtual BaseConnection::ptr connection() override { return _conn; }
 
 private:
     // 连接和关闭时的回调函数
     void onConnection(const muduo::net::TcpConnectionPtr &conn) {
-        // DLOG("连接到来");
         if (conn->connected()) {
             std::cout << "连接建立！" << std::endl;
             _conn = ConnectionFactory::create(conn, _protocol);
             _downlatch.countDown();  // downlatch计数--
-            // DLOG("是否连接: %d", connected());
         } else {
             std::cout << "连接失败！" << std::endl;
             _conn.reset();
-            _downlatch.countDown();
+            _downlatch.countDown();  // downlatch计数--
         }
     }
     // 收到消息时的回调函数
@@ -302,9 +295,6 @@ private:
                    muduo::net::Buffer *buf, muduo::Timestamp) {
         DLOG("连接有数据到来开始处理");
         auto base_buf = BufferFactory::create(buf);
-        // std::string body =
-        // base_buf->retrieveAsString(base_buf->readableSize()); DLOG("%s",
-        // body.c_str());
         while (1) {
             if (_protocol->canProcessed(base_buf) == false) {
                 if (base_buf->readableSize() > maxDataSize) {
