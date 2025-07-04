@@ -1,3 +1,4 @@
+#pragma once
 #include <pthread.h>
 
 #include <future>
@@ -35,7 +36,7 @@ public:
         } else {
             ELOG("未知请求类型");
         }
-        // 处理完立即删除，防止内存积压
+        // 处理完立即删除，防止内存泄漏
         delDescription(rid);
     }
     bool send(const BaseConnection::ptr &conn, const BaseMessage::ptr &req,

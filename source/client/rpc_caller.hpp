@@ -1,3 +1,4 @@
+#pragma once
 #include <jsoncpp/json/value.h>
 #include <jsoncpp/json/version.h>
 
@@ -58,6 +59,7 @@ public:
         req_msg->setParams(params);
 
         auto json_promise = std::make_shared<std::promise<Json::Value>>();
+        result = json_promise->get_future();
         Requestor::RequestCallback cb =
             std::bind(&RpcCaller::CallbackAsync, this, json_promise,
                       std::placeholders::_1);
@@ -71,7 +73,7 @@ public:
         return true;
     }
     bool call(const BaseConnection::ptr &conn, const std::string &method,
-              const Json::Value &params, JsonResponseCallback &cb) {
+              const Json::Value &params, const JsonResponseCallback &cb) {
         // 1.组织请求
         auto req_msg = MessageFactory::create<RpcRequest>();
         req_msg->setId(UUID::uuid());

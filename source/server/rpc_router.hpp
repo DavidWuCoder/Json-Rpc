@@ -22,7 +22,7 @@ public:
         std::function<void(const Json::Value &, Json::Value &)>;
     using ParamDescription = std::pair<std::string, VType>;
 
-    ServiceDescription(const std::string &&mname, ServiceCallback &&cb,
+    ServiceDescription(std::string &&mname, ServiceCallback &&cb,
                        std::vector<ParamDescription> &&desc, VType rtype)
         : _method_name(std::move(mname)),
           _callback(std::move(cb)),
@@ -139,6 +139,7 @@ private:
 class RpcRouter {
 public:
     using ptr = std::shared_ptr<RpcRouter>;
+    RpcRouter() : _manager(std::make_shared<ServiceManager>()) {}
     // 注册给dispatcher模块的回调函数
     void onRpcRequest(const wylrpc::BaseConnection::ptr &conn,
                       wylrpc::RpcRequest::ptr &req) {
