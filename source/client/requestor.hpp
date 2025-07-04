@@ -10,6 +10,7 @@
 namespace wylrpc {
 namespace client {
 class Requestor {
+public:
     using RequestCallback = std::function<void(BaseMessage::ptr)>;
     using AsyncResponse = std::future<BaseMessage::ptr>;
     using ptr = std::shared_ptr<Requestor>;
@@ -34,6 +35,8 @@ class Requestor {
         } else {
             ELOG("未知请求类型");
         }
+        // 处理完立即删除，防止内存积压
+        delDescription(rid);
     }
     bool send(const BaseConnection::ptr &conn, const BaseMessage::ptr &req,
               AsyncResponse &async_rsp) {
