@@ -82,7 +82,7 @@ protected:
 
 class BaseClient {
 public:
-    using ptr = std::shared_ptr<BaseServer>;
+    using ptr = std::shared_ptr<BaseClient>;
     virtual void setConnectionCallback(ConnectionCallback cb) {
         _cb_connection = cb;
     }

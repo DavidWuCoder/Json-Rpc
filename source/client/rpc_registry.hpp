@@ -13,7 +13,7 @@ namespace wylrpc {
 namespace client {
 class Provider {
 public:
-    using prt = std::shared_ptr<Provider>;
+    using ptr = std::shared_ptr<Provider>;
     Provider(const Requestor::ptr requestor) : _requestor(requestor) {}
     bool registerMethod(const BaseConnection::ptr &conn,
                         const std::string &method, const Address &host) {
