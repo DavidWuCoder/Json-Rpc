@@ -18,13 +18,13 @@ public:
         : _requestor(std::make_shared<Requestor>()),
           _provider(std::make_shared<Provider>(_requestor)),
           _dispatcher(std::make_shared<Dispatcher>()) {
-        _dispatcher->registerHandler<wylrpc::BaseMessage>(
-            wylrpc::MType::RSP_RPC,
-            std::bind(&wylrpc::client::Requestor::onResponse, _requestor.get(),
+        _dispatcher->registerHandler<BaseMessage>(
+            MType::RSP_SERVICE,
+            std::bind(&client::Requestor::onResponse, _requestor.get(),
                       std::placeholders::_1, std::placeholders::_2));
-        auto client = wylrpc::ClientFactory::create(ip, port);
+        auto client = ClientFactory::create(ip, port);
         client->setMessageCallback(
-            std::bind(&wylrpc::Dispatcher::onMessage, _dispatcher.get(),
+            std::bind(&Dispatcher::onMessage, _dispatcher.get(),
                       std::placeholders::_1, std::placeholders::_2));
         client->connect();
     }
@@ -44,13 +44,36 @@ class DiscoveryClient {
 public:
     using ptr = std::shared_ptr<DiscoveryClient>;
     // 构造函数传入注册中心地址，用于连接注册中心
-    DiscoveryClient(const std::string &ip, int port) {}
+    DiscoveryClient(const std::string &ip, int port)
+        : _requestor(std::make_shared<Requestor>()),
+          _discoverer(std::make_shared<Discoverer>(_requestor)),
+          _dispatcher(std::make_shared<Dispatcher>()) {
+        auto rsp_cb =
+            std::bind(&client::Requestor::onResponse, _requestor.get(),
+                      std::placeholders::_1, std::placeholders::_2);
+        _dispatcher->registerHandler<BaseMessage>(MType::RSP_SERVICE, rsp_cb);
+
+        auto req_cb =
+            std::bind(&client::Discoverer::onServiceRequest, _discoverer.get(),
+                      std::placeholders::_1, std::placeholders::_2);
+        _dispatcher->registerHandler<ServiceRequest>(MType::REQ_SERVICE,
+                                                     req_cb);
+        auto client = ClientFactory::create(ip, port);
+        client->setMessageCallback(
+            std::bind(&Dispatcher::onMessage, _dispatcher.get(),
+                      std::placeholders::_1, std::placeholders::_2));
+        client->connect();
+    }
+
     // 向外提供的服务发现的接口
-    bool serviceDiscovery(const std::string &method, Address &host) {}
+    bool serviceDiscovery(const std::string &method, Address &host) {
+        return _discoverer->serviceDiscovery(_client->connection(), method,
+                                             host);
+    }
 
 private:
     Requestor::ptr _requestor;
-    client::Discoverer::ptr _provider;
+    client::Discoverer::ptr _discoverer;
     Dispatcher::ptr _dispatcher;
     BaseClient::ptr _client;
 };
