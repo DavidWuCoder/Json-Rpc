@@ -92,8 +92,7 @@ private:
     std::mutex _mutex;
     std::unordered_map<std::string, std::set<Provider::ptr>>
         _method_to_providers;
-    std::unordered_map<const BaseConnection::ptr, Provider::ptr>
-        _conn_to_provider;
+    std::unordered_map<BaseConnection::ptr, Provider::ptr> _conn_to_provider;
 };
 
 class DiscovererManager {
@@ -175,7 +174,7 @@ private:
     std::mutex _mutex;
     std::unordered_map<std::string, std::set<Discoverer::ptr>>
         _method_to_discoverers;
-    std::unordered_map<const BaseConnection::ptr, Discoverer::ptr>
+    std::unordered_map<BaseConnection::ptr, Discoverer::ptr>
         _conn_to_discoverer;
 };
 

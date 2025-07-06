@@ -1,5 +1,5 @@
-CFLAG=-I ../../build/release-install-cpp11/include/
-LFLAG=-L ../../build/release-install-cpp11/lib/ -l muduo_net -l muduo_base -lpthread -ljsoncpp
+CFLAG=-I ../../../build/release-install-cpp11/include/
+LFLAG=-L ../../../build/release-install-cpp11/lib/ -l muduo_net -l muduo_base -lpthread -ljsoncpp
 all: client server
 
 server: test_server.cpp

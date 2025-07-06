@@ -92,6 +92,7 @@ public:
           _caller(std::make_shared<RpcCaller>(_requestor)),
           _dispatcher(std::make_shared<Dispatcher>()) {
         // 针对Rpc响应进行回调处理
+        DLOG("设置相关回调属性");
         auto rsp_cb =
             std::bind(&client::Requestor::onResponse, _requestor.get(),
                       std::placeholders::_1, std::placeholders::_2);
@@ -104,16 +105,18 @@ public:
             _dicovery_client =
                 std::make_shared<DiscoveryClient>(ip, port, offline_cb);
         } else {
-            auto _rpc_client = ClientFactory::create(ip, port);
+            _rpc_client = ClientFactory::create(ip, port);
             _rpc_client->setMessageCallback(
                 std::bind(&Dispatcher::onMessage, _dispatcher.get(),
                           std::placeholders::_1, std::placeholders::_2));
             _rpc_client->connect();
         }
+        DLOG("回调属性设置完成");
     }
     // 向外提供的服务调用的接口
     bool call(const std::string &method, const Json::Value &params,
               Json::Value &result) {
+        DLOG("开始同步请求");
         // 获取服务发现者
         BaseClient::ptr client = getClient(method);
         if (client.get() == nullptr) {
@@ -121,6 +124,7 @@ public:
         }
         // 3.发送请求
         _caller->call(client->connection(), method, params, result);
+        DLOG("同步请求完成");
         return true;
     }
     bool call(const std::string &method, const Json::Value &params,
@@ -195,7 +199,7 @@ private:
 
 private:
     struct AddressHash {
-        size_t operator()(const Address &host) {
+        size_t operator()(const Address &host) const {
             std::string addr = host.first + std::to_string(host.second);
             return std::hash<std::string>{}(addr);
         }

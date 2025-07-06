@@ -62,8 +62,8 @@ public:
                                 std::placeholders::_1, std::placeholders::_2);
         _dispatcher->registerHandler<RpcRequest>(MType::REQ_RPC, rpc_cb);
 
-        auto server = wylrpc::ServerFactory::create(8080);
-        server->setMessageCallback(
+        _server = wylrpc::ServerFactory::create(8080);
+        _server->setMessageCallback(
             std::bind(&wylrpc::Dispatcher::onMessage, _dispatcher.get(),
                       std::placeholders::_1, std::placeholders::_2));
     }
@@ -75,7 +75,10 @@ public:
         _router->registerHandler(desc);
     }
 
-    void start() { _server->start(); }
+    void start() {
+        ILOG("服务端启动")
+        _server->start();
+    }
 
 private:
     bool _enableRegistry;
