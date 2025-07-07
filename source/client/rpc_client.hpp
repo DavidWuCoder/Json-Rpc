@@ -24,11 +24,11 @@ public:
             MType::RSP_SERVICE,
             std::bind(&client::Requestor::onResponse, _requestor.get(),
                       std::placeholders::_1, std::placeholders::_2));
-        auto client = ClientFactory::create(ip, port);
-        client->setMessageCallback(
+        _client = ClientFactory::create(ip, port);
+        _client->setMessageCallback(
             std::bind(&Dispatcher::onMessage, _dispatcher.get(),
                       std::placeholders::_1, std::placeholders::_2));
-        client->connect();
+        _client->connect();
     }
     // 向外提供的服务注册的接口
     bool registerMethod(const std::string &method, const Address &host) {
@@ -61,11 +61,11 @@ public:
                       std::placeholders::_1, std::placeholders::_2);
         _dispatcher->registerHandler<ServiceRequest>(MType::REQ_SERVICE,
                                                      req_cb);
-        auto client = ClientFactory::create(ip, port);
-        client->setMessageCallback(
+        _client = ClientFactory::create(ip, port);
+        _client->setMessageCallback(
             std::bind(&Dispatcher::onMessage, _dispatcher.get(),
                       std::placeholders::_1, std::placeholders::_2));
-        client->connect();
+        _client->connect();
     }
 
     // 向外提供的服务发现的接口
@@ -116,7 +116,6 @@ public:
     // 向外提供的服务调用的接口
     bool call(const std::string &method, const Json::Value &params,
               Json::Value &result) {
-        DLOG("开始同步请求");
         // 获取服务发现者
         BaseClient::ptr client = getClient(method);
         if (client.get() == nullptr) {
@@ -124,7 +123,6 @@ public:
         }
         // 3.发送请求
         _caller->call(client->connection(), method, params, result);
-        DLOG("同步请求完成");
         return true;
     }
     bool call(const std::string &method, const Json::Value &params,
@@ -178,6 +176,7 @@ private:
                 ELOG("%s 服务当前没有可提供服务的主机", method.c_str());
                 return BaseClient::ptr();
             }
+            DLOG("找到服务主机 %s : %d", host.first.c_str(), host.second);
             // 查看是否已有客户端，直接使用或者创建
             client = getClient(host);
             if (client.get() == nullptr) {

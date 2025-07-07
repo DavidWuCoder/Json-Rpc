@@ -21,7 +21,7 @@ public:
         _dispatcher->registerHandler<ServiceRequest>(MType::REQ_SERVICE,
                                                      req_cb);
 
-        _server = wylrpc::ServerFactory::create(8080);
+        _server = wylrpc::ServerFactory::create(port);
         _server->setMessageCallback(
             std::bind(&wylrpc::Dispatcher::onMessage, _dispatcher.get(),
                       std::placeholders::_1, std::placeholders::_2));
@@ -62,7 +62,7 @@ public:
                                 std::placeholders::_1, std::placeholders::_2);
         _dispatcher->registerHandler<RpcRequest>(MType::REQ_RPC, rpc_cb);
 
-        _server = wylrpc::ServerFactory::create(8080);
+        _server = wylrpc::ServerFactory::create(access_addr.second);
         _server->setMessageCallback(
             std::bind(&wylrpc::Dispatcher::onMessage, _dispatcher.get(),
                       std::placeholders::_1, std::placeholders::_2));

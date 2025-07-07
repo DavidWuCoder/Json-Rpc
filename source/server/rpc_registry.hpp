@@ -194,7 +194,7 @@ public:
                  msg->host().second, msg->method().c_str());
             _provider_manager->addProvider(conn, msg->host(), msg->method());
             _discoverer_manager->onlineNotify(msg->method(), msg->host());
-            return errResponse(conn, msg);
+            return registryResponse(conn, msg);
         } else if (msg->optype() == ServiceOptype::SERVICE_DISCOVERY) {
             _discoverer_manager->addDiscoverer(conn, msg->method());
             return dicoveryResponse(conn, msg);

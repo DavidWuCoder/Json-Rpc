@@ -56,6 +56,7 @@ public:
         if (buf->readableSize() < (total_len + lenFieldsLength)) {
             return false;
         }
+        DLOG("数据能处理");
         return true;
     }
     virtual bool onMessage(const BaseBuffer::ptr &buf,
@@ -166,7 +167,7 @@ private:
     // 连接和关闭时的回调函数
     void onConnection(const muduo::net::TcpConnectionPtr &conn) {
         if (conn->connected()) {
-            std::cout << "连接建立！" << std::endl;
+            DLOG("连接建立！");
             BaseConnection::ptr muduo_conn =
                 ConnectionFactory::create(conn, _protocol);
             {
@@ -175,7 +176,7 @@ private:
             }
             if (_cb_connection) _cb_connection(muduo_conn);
         } else {
-            std::cout << "连接失败！" << std::endl;
+            DLOG("连接失败！");
             BaseConnection::ptr muduo_conn;
             {
                 std::unique_lock<std::mutex> lock(_mutex);
@@ -281,11 +282,11 @@ private:
     // 连接和关闭时的回调函数
     void onConnection(const muduo::net::TcpConnectionPtr &conn) {
         if (conn->connected()) {
-            std::cout << "连接建立！" << std::endl;
+            DLOG("连接建立！");
             _conn = ConnectionFactory::create(conn, _protocol);
             _downlatch.countDown();  // downlatch计数--
         } else {
-            std::cout << "连接失败！" << std::endl;
+            DLOG("连接断开！");
             _conn.reset();
             _downlatch.countDown();  // downlatch计数--
         }
@@ -298,17 +299,20 @@ private:
         while (1) {
             if (_protocol->canProcessed(base_buf) == false) {
                 if (base_buf->readableSize() > maxDataSize) {
-                    conn->shutdown();
                     ELOG("缓冲区中数据过大！");
+                    sleep(1);
+                    conn->shutdown();
                     return;
                 }
+                std::cout << buf->retrieveAllAsString() << std::endl;
                 break;
             }
             BaseMessage::ptr msg;
             bool ret = _protocol->onMessage(base_buf, msg);
             if (ret == false) {
-                conn->shutdown();
                 ELOG("缓冲区中数据错误");
+                sleep(1);
+                conn->shutdown();
                 return;
             }
             if (_cb_message) _cb_message(_conn, msg);

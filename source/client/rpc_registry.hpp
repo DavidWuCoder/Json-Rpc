@@ -106,6 +106,7 @@ public:
         msg_req->setMethod(method);
         BaseMessage::ptr msg_rsp;
         bool ret = _requestor->send(conn, msg_req, msg_rsp);
+        DLOG("发送一个服务发现的请求完毕");
         if (ret == false) {
             ELOG("%s 服务注册失败", method.c_str());
             return false;
