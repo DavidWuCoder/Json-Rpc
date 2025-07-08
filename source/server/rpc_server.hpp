@@ -7,6 +7,7 @@
 #include "../common/net.hpp"
 #include "rpc_registry.hpp"
 #include "rpc_router.hpp"
+#include "rpc_topic.hpp"
 
 namespace wylrpc {
 namespace server {
@@ -86,6 +87,36 @@ private:
     Address access_addr;
     client::RegistryClient::ptr _reg_client;
     RpcRouter::ptr _router;
+    Dispatcher::ptr _dispatcher;
+    BaseServer::ptr _server;
+};
+
+class TopicServer {
+public:
+    using ptr = std::shared_ptr<RegistryServer>;
+    TopicServer(int port)
+        : _topic_manager(std::make_shared<TopicManager>()),
+          _dispatcher(std::make_shared<Dispatcher>()) {
+        auto req_cb =
+            std::bind(&TopicManager::onTopicRequest, _topic_manager.get(),
+                      std::placeholders::_1, std::placeholders::_2);
+        _dispatcher->registerHandler<TopicRequest>(MType::REQ_TOPIC, req_cb);
+
+        _server = wylrpc::ServerFactory::create(port);
+        _server->setMessageCallback(
+            std::bind(&wylrpc::Dispatcher::onMessage, _dispatcher.get(),
+                      std::placeholders::_1, std::placeholders::_2));
+        _server->setCloseCallback(std::bind(&TopicServer::onConnectionShutdown,
+                                            this, std::placeholders::_1));
+    }
+
+    void start() { _server->start(); }
+
+private:
+    void onConnectionShutdown(const BaseConnection::ptr &conn) {
+        _topic_manager->onShutdown(conn);
+    }
+    TopicManager::ptr _topic_manager;
     Dispatcher::ptr _dispatcher;
     BaseServer::ptr _server;
 };
