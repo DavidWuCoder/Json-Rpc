@@ -1,3 +1,4 @@
+#pragma once
 #include <memory>
 
 #include "../client/rpc_client.hpp"
