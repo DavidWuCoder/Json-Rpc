@@ -9,6 +9,7 @@
 #include "requestor.hpp"
 #include "rpc_caller.hpp"
 #include "rpc_registry.hpp"
+#include "rpc_topic.hpp"
 
 namespace wylrpc {
 namespace client {
@@ -211,6 +212,54 @@ private:
     BaseClient::ptr _rpc_client;
     std::mutex _mutex;
     std::unordered_map<Address, BaseClient::ptr, AddressHash> _rpc_clients;
+};
+
+class TopicClient {
+public:
+    using ptr = std::shared_ptr<RegistryClient>;
+    // 构造函数传入注册中心地址，用于连接注册中心
+    TopicClient(const std::string &ip, int port)
+        : _requestor(std::make_shared<Requestor>()),
+          _topic_manager(std::make_shared<TopicManager>(_requestor)),
+          _dispatcher(std::make_shared<Dispatcher>()) {
+        _dispatcher->registerHandler<BaseMessage>(
+            MType::RSP_TOPIC,
+            std::bind(&client::Requestor::onResponse, _requestor.get(),
+                      std::placeholders::_1, std::placeholders::_2));
+        _dispatcher->registerHandler<TopicRequest>(
+            MType::REQ_TOPIC,
+            std::bind(&TopicManager::onPublish, _topic_manager.get(),
+                      std::placeholders::_1, std::placeholders::_2));
+
+        _client = ClientFactory::create(ip, port);
+        _client->setMessageCallback(
+            std::bind(&Dispatcher::onMessage, _dispatcher.get(),
+                      std::placeholders::_1, std::placeholders::_2));
+        _client->connect();
+    }
+    bool create(const std::string &topic_name) {
+        return _topic_manager->create(_client->connection(), topic_name);
+    }
+    bool remove(const std::string &topic_name) {
+        return _topic_manager->remove(_client->connection(), topic_name);
+    }
+    bool subscribe(const std::string &topic_name,
+                   const TopicManager::TopicCallback &cb) {
+        return _topic_manager->subscribe(_client->connection(), topic_name, cb);
+    }
+    bool cancel(const std::string &topic_name) {
+        return _topic_manager->cancel(_client->connection(), topic_name);
+    }
+    bool publish(const std::string &topic_name, const std::string &msg) {
+        return _topic_manager->publish(_client->connection(), topic_name, msg);
+    }
+    void shutdown() { _client->shutdown(); }
+
+private:
+    Requestor::ptr _requestor;
+    TopicManager::ptr _topic_manager;
+    Dispatcher::ptr _dispatcher;
+    BaseClient::ptr _client;
 };
 }  // namespace client
 }  // namespace wylrpc
