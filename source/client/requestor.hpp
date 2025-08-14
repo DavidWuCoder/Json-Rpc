@@ -10,6 +10,7 @@
 
 namespace wylrpc {
 namespace client {
+
 class Requestor {
 public:
     using RequestCallback = std::function<void(BaseMessage::ptr)>;
